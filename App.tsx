@@ -700,7 +700,6 @@ function normalizePage(p: any): Page {
   return map[v] ?? (Object.values(Page).includes(v as any) ? (v as Page) : Page.Dashboard);
 }
 
-
 type HashNavState = { path: string; params: Record<string, string> };
 
 function parseHashLocation(): HashNavState {
@@ -828,7 +827,6 @@ export default function App() {
     },
     [syncHashToState]
   );
-
   const [invoiceQuickFilter, setInvoiceQuickFilter] = useState<'all' | 'unpaid' | 'overdue'>('all');
   const [estimateQuickFilter, setEstimateQuickFilter] = useState<'all' | 'draft' | 'sent' | 'accepted' | 'declined'>('all');
 
@@ -919,8 +917,8 @@ export default function App() {
   };
   
   // License / Activation State
-  const LICENSE_STORAGE_KEY = 'moniezi_license';
-  const [isLicenseValid, setIsLicenseValid] = useState<boolean | null>(null); // null = checking, false = invalid, true = valid
+    const LICENSING_ENABLED = false; // TEMP: disable licensing gate for testing
+    const [isLicenseValid, setIsLicenseValid] = useState<boolean | null>(LICENSING_ENABLED ? null : true); // null = checking, false = invalid, true = valid
   const [licenseKey, setLicenseKey] = useState('');
   const [licenseError, setLicenseError] = useState('');
   const [isValidatingLicense, setIsValidatingLicense] = useState(false);
@@ -1074,13 +1072,15 @@ export default function App() {
   const [auditMissingDelta, setAuditMissingDelta] = useState<number>(0);
   const [auditMissingPulse, setAuditMissingPulse] = useState<boolean>(false);
   const [newTrip, setNewTrip] = useState<any>({ date: new Date().toISOString().split('T')[0], miles: '', purpose: '', client: '', notes: '' });
-
-  const [mileageHistoryOpen, setMileageHistoryOpen] = useState(false);
-  const [mileageModalOpen, setMileageModalOpen] = useState(false);
-  const [mileageFilterMonth, setMileageFilterMonth] = useState('all'); // 'all' or 'YYYY-MM'
-  const [mileageQuery, setMileageQuery] = useState('');
-
   const taxSnapshotRef = useRef<HTMLDivElement>(null);
+
+  // Reports screen menu (Settings-style tiles)
+  const [reportsMenuSection, setReportsMenuSection] = useState<'pl'|'taxsnapshot'|'taxprep'|'mileage'|'planner'>('pl');
+  const scrollToReportSection = (id: string, section: typeof reportsMenuSection) => {
+    setReportsMenuSection(section);
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   // Keep Tax Prep audit counters reactive (so demo shows a visible before/after change)
   useEffect(() => {
@@ -1120,7 +1120,6 @@ export default function App() {
   const [scanMode, setScanMode] = useState<'receiptOnly' | 'expenseWithReceipt'>('receiptOnly');
   const [viewingReceipt, setViewingReceipt] = useState<ReceiptType | null>(null);
   const scanInputRef = useRef<HTMLInputElement>(null);
-
 
   // --- Receipt viewer + Report preview: URL-backed so OS back button stays inside the app ---
   const openReceipt = useCallback(
@@ -1163,7 +1162,6 @@ export default function App() {
     const should = hashParams.modal === 'pl';
     if (should !== showPLPreview) setShowPLPreview(should);
   }, [hashParams.modal]);
-
 
   // Tax Planner State
   const [isPlannerOpen, setIsPlannerOpen] = useState(false);
@@ -1372,7 +1370,19 @@ export default function App() {
 
   // License validation on app load
   useEffect(() => {
+    if (!LICENSING_ENABLED) {
+      setIsLicenseValid(true);
+      return;
+    }
+    if (!LICENSING_ENABLED) {
+      setIsLicenseValid(true);
+      return;
+    }
     const checkStoredLicense = async () => {
+      if (!LICENSING_ENABLED) {
+        setIsLicenseValid(true);
+        return;
+      }
       const stored = localStorage.getItem(LICENSE_STORAGE_KEY);
       if (stored) {
         try {
@@ -1405,6 +1415,8 @@ export default function App() {
 
   // Validate license with server (with offline grace window)
   const validateLicenseWithServer = async (key: string): Promise<boolean> => {
+    if (!LICENSING_ENABLED) return true;
+    if (!LICENSING_ENABLED) return true;
     const storedRaw = localStorage.getItem(LICENSE_STORAGE_KEY);
     const stored = storedRaw ? (() => { try { return JSON.parse(storedRaw); } catch { return null; } })() : null;
 
@@ -1470,6 +1482,12 @@ export default function App() {
 
   // Handle license activation
   const handleActivateLicense = async () => {
+    if (!LICENSING_ENABLED) {
+      setIsLicenseValid(true);
+      setLicenseError("");
+      showToast("Licensing is disabled in this build", "success");
+      return;
+    }
     if (!licenseKey.trim()) {
       setLicenseError('Please enter a license key');
       return;
@@ -3916,15 +3934,6 @@ const demoMileageTrips: MileageTrip[] = [
     return mileageTrips.filter(t => new Date(t.date).getFullYear() === taxPrepYear);
   }, [mileageTrips, taxPrepYear]);
 
-
-  const mileageRateCents = Number(settings.mileageRateCents ?? 72.5);
-  const mileageSummary = useMemo(() => {
-    const totalMiles = mileageForTaxYear.reduce((s, t) => s + Number(t.miles || 0), 0);
-    const estDeduction = totalMiles * (mileageRateCents / 100);
-    const tripCount = mileageForTaxYear.length;
-    return { totalMiles, estDeduction, tripCount };
-  }, [mileageForTaxYear, mileageRateCents]);
-
   const handleExportTaxLedgerCSV = () => {
     const rows: any[][] = [
       ['date', 'type', 'name', 'category', 'amount', 'notes', 'receiptId'],
@@ -4029,7 +4038,7 @@ const demoMileageTrips: MileageTrip[] = [
     setIsGeneratingPLPdf(true);
     try {
       // Ensure preview is visible (PDF is captured from the preview DOM)
-      if (!showPLPreview) openPLPreview();
+      if (!showPLPreview) setShowPLPreview(true);
 
       // Let the modal render fully
       await new Promise(resolve => setTimeout(resolve, 350));
@@ -4605,7 +4614,7 @@ const demoMileageTrips: MileageTrip[] = [
         if (isMounted) {
           showToast("P&L PDF Downloaded", "success");
           setPlExportRequested(false);
-          setTimeout(() => setShowPLPreview(false), 1000);
+          setTimeout(() => closePLPreview(), 1000);
         }
       } catch (error) {
         console.error("P&L PDF failed:", error);
@@ -4736,7 +4745,7 @@ const demoMileageTrips: MileageTrip[] = [
       const backup = {
         metadata: {
           appName: "MONIEZI",
-          version: "10.2.3-taxprep_demo_idb",
+          version: "15.0.0-taxprep_backnav",
           schemaVersion: 1,
           timestamp: new Date().toISOString(),
         },
@@ -4928,7 +4937,7 @@ const demoMileageTrips: MileageTrip[] = [
   }, [activeItem]);
 
   // Show loading state while checking license
-  if (isLicenseValid === null) {
+  if (LICENSING_ENABLED && isLicenseValid === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950">
         <div className="text-center">
@@ -4962,7 +4971,7 @@ const demoMileageTrips: MileageTrip[] = [
   }
 
   // Show license activation screen if not valid
-  if (isLicenseValid === false) {
+  if (LICENSING_ENABLED && isLicenseValid === false) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
         {/* Background decoration */}
@@ -5161,7 +5170,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                     </div>
                     <div className="flex gap-2">
                         <button onClick={() => { handleDownloadReceipt(viewingReceipt.id); }} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><Download size={24} /></button>
-                        <button onClick={() => closeReceipt()} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><X size={24} /></button>
+                        <button onClick={closeReceipt} className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"><X size={24} /></button>
                     </div>
                 </div>
                 <div className="flex-1 bg-black rounded-xl overflow-hidden relative border border-white/10 shadow-2xl mb-4 flex items-center justify-center">
@@ -6426,8 +6435,82 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                 <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-950 dark:text-white font-brand">Reports</h2>
               </div>
               
-              {/* Pro-Grade U.S. P&L Statement */}
-              <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl">
+              
+              <p className="text-slate-600 dark:text-slate-300 font-semibold mb-3">
+                Choose a report section below.
+              </p>
+
+              {/* Reports Menu (like Settings) */}
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-2 shadow-sm mb-4">
+                <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => scrollToReportSection('report-pl', 'pl')}
+                    className={`flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-3 md:px-4 py-3 rounded-lg font-bold text-xs md:text-sm uppercase tracking-wide transition-all ${
+                      reportsMenuSection === 'pl'
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <BarChart3 size={18} />
+                    <span className="text-[10px] md:text-sm mt-0.5 md:mt-0 text-center leading-tight">Profit &amp; Loss</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => scrollToReportSection('report-taxsnapshot', 'taxsnapshot')}
+                    className={`flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-3 md:px-4 py-3 rounded-lg font-bold text-xs md:text-sm uppercase tracking-wide transition-all ${
+                      reportsMenuSection === 'taxsnapshot'
+                        ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <Calculator size={18} />
+                    <span className="text-[10px] md:text-sm mt-0.5 md:mt-0 text-center leading-tight">Tax Snapshot</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => scrollToReportSection('report-taxprep', 'taxprep')}
+                    className={`flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-3 md:px-4 py-3 rounded-lg font-bold text-xs md:text-sm uppercase tracking-wide transition-all ${
+                      reportsMenuSection === 'taxprep'
+                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <Download size={18} />
+                    <span className="text-[10px] md:text-sm mt-0.5 md:mt-0 text-center leading-tight">Tax Prep</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => scrollToReportSection('report-mileage', 'mileage')}
+                    className={`flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-3 md:px-4 py-3 rounded-lg font-bold text-xs md:text-sm uppercase tracking-wide transition-all ${
+                      reportsMenuSection === 'mileage'
+                        ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/30'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <Truck size={18} />
+                    <span className="text-[10px] md:text-sm mt-0.5 md:mt-0 text-center leading-tight">Mileage</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => scrollToReportSection('report-planner', 'planner')}
+                    className={`flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-3 md:px-4 py-3 rounded-lg font-bold text-xs md:text-sm uppercase tracking-wide transition-all ${
+                      reportsMenuSection === 'planner'
+                        ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/30'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <ClipboardList size={18} />
+                    <span className="text-[10px] md:text-sm mt-0.5 md:mt-0 text-center leading-tight">Tax Planner</span>
+                  </button>
+                </div>
+              </div>
+{/* Pro-Grade U.S. P&L Statement */}
+              <div id="report-pl" className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl">
                 {/* Controls Header - NOT part of PDF */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-200 dark:border-slate-700">
                   <div className="flex items-center gap-3">
@@ -6547,7 +6630,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                 </div>
               </div>
 
-              <div ref={taxSnapshotRef} className="bg-white dark:bg-slate-950 text-slate-900 dark:text-white p-5 sm:p-8 rounded-lg shadow-xl relative overflow-hidden border border-slate-200 dark:border-slate-800">
+              <div id="report-taxsnapshot" ref={taxSnapshotRef} className="bg-white dark:bg-slate-950 text-slate-900 dark:text-white p-5 sm:p-8 rounded-lg shadow-xl relative overflow-hidden border border-slate-200 dark:border-slate-800">
                 <div className="absolute top-0 right-0 w-80 h-80 bg-blue-50 dark:bg-blue-600/20 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 sm:mb-8 relative z-10">
                   <div className="flex items-center gap-2 sm:gap-3">
@@ -6592,7 +6675,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                 
 
                 {/* Tax Prep Package (Exports) */}
-                <div className="bg-white dark:bg-slate-950 p-5 sm:p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl">
+                <div id="report-taxprep" className="bg-white dark:bg-slate-950 p-5 sm:p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                     <div className="flex items-center gap-3">
                       <div className="p-2.5 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
@@ -6667,7 +6750,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                 </div>
 
                 {/* Mileage Tracker */}
-                <div className="bg-white dark:bg-slate-950 p-5 sm:p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl">
+                <div id="report-mileage" className="bg-white dark:bg-slate-950 p-5 sm:p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl">
                   <div className="flex items-center gap-3 mb-6">
                     <div className="p-2.5 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
                       <Truck size={20} strokeWidth={2} />
@@ -6706,244 +6789,49 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                     </div>
                   </div>
 
-                  
-                {/* Mileage history is collapsed by default to stay usable with hundreds of trips */}
-                <div className="mt-6 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Trips</div>
-                      <div className="text-lg font-extrabold tabular-nums text-slate-900 dark:text-white mt-1">{mileageSummary.tripCount}</div>
-                    </div>
-                    <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Total miles</div>
-                      <div className="text-lg font-extrabold tabular-nums text-slate-900 dark:text-white mt-1">{mileageSummary.totalMiles.toFixed(1)}</div>
-                    </div>
-                    <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Est. deduction</div>
-                      <div className="text-lg font-extrabold tabular-nums text-emerald-600 dark:text-emerald-400 mt-1">{formatCurrency.format(mileageSummary.estDeduction)}</div>
-                    </div>
+                  <div className="mt-6 overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                          <th className="py-2 pr-4">Date</th>
+                          <th className="py-2 pr-4">Miles</th>
+                          <th className="py-2 pr-4">Purpose</th>
+                          <th className="py-2 pr-4">Client</th>
+                          <th className="py-2 pr-4">Notes</th>
+                          <th className="py-2 pr-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {mileageForTaxYear.length === 0 ? (
+                          <tr><td colSpan={6} className="py-4 text-slate-500 dark:text-slate-400">No mileage trips for {taxPrepYear}.</td></tr>
+                        ) : mileageForTaxYear.slice().sort((a,b) => b.date.localeCompare(a.date)).map(trip => (
+                          <tr key={trip.id} className="border-b border-slate-200/60 dark:border-slate-800/60">
+                            <td className="py-2 pr-4">
+                              <input type="date" value={trip.date} onChange={e => updateMileageTrip(trip.id, { date: e.target.value })} className="bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
+                            </td>
+                            <td className="py-2 pr-4">
+                              <input type="number" value={trip.miles} onChange={e => updateMileageTrip(trip.id, { miles: Number(e.target.value) })} className="w-24 bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
+                            </td>
+                            <td className="py-2 pr-4">
+                              <input type="text" value={trip.purpose} onChange={e => updateMileageTrip(trip.id, { purpose: e.target.value })} className="w-64 bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
+                            </td>
+                            <td className="py-2 pr-4">
+                              <input type="text" value={trip.client || ''} onChange={e => updateMileageTrip(trip.id, { client: e.target.value })} className="w-40 bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
+                            </td>
+                            <td className="py-2 pr-4">
+                              <input type="text" value={trip.notes || ''} onChange={e => updateMileageTrip(trip.id, { notes: e.target.value })} className="w-48 bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
+                            </td>
+                            <td className="py-2 pr-4 text-right">
+                              <button onClick={() => deleteMileageTrip(trip.id)} className="px-3 py-2 rounded-lg bg-red-600 text-white font-extrabold uppercase tracking-widest text-xs hover:bg-red-700 active:scale-95 transition-all">Delete</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="text-sm text-slate-600 dark:text-slate-300">
-                      Keep history collapsed so you don’t have to scroll forever.
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setMileageHistoryOpen(v => !v)}
-                        className="px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-extrabold uppercase tracking-widest text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all"
-                      >
-                        {mileageHistoryOpen ? 'Hide recent' : 'Show recent'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setMileageModalOpen(true)}
-                        className="px-3 py-2 rounded-lg bg-blue-600 text-white font-extrabold uppercase tracking-widest text-xs hover:bg-blue-700 active:scale-95 transition-all"
-                      >
-                        View all trips
-                      </button>
-                    </div>
-                  </div>
-
-                  {mileageHistoryOpen && (
-                    <div className="rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
-                      <div className="px-3 py-2 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                        <div className="text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300">Recent trips</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          Showing latest {Math.min(5, mileageForTaxYear.length)} of {mileageForTaxYear.length}
-                        </div>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-slate-50 dark:bg-slate-900/60">
-                            <tr className="text-left text-slate-700 dark:text-slate-200">
-                              <th className="py-2 px-3 font-extrabold uppercase tracking-widest text-xs">Date</th>
-                              <th className="py-2 px-3 font-extrabold uppercase tracking-widest text-xs">Miles</th>
-                              <th className="py-2 px-3 font-extrabold uppercase tracking-widest text-xs">Purpose</th>
-                              <th className="py-2 px-3 font-extrabold uppercase tracking-widest text-xs">Client</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {mileageForTaxYear
-                              .slice()
-                              .sort((a, b) => b.date.localeCompare(a.date))
-                              .slice(0, 5)
-                              .map(trip => (
-                                <tr key={trip.id} className="border-t border-slate-200 dark:border-slate-800">
-                                  <td className="py-2 px-3 font-bold tabular-nums">{trip.date}</td>
-                                  <td className="py-2 px-3 font-bold tabular-nums">{Number(trip.miles || 0).toFixed(1)}</td>
-                                  <td className="py-2 px-3 font-semibold">{trip.purpose}</td>
-                                  <td className="py-2 px-3 font-semibold">{trip.client || ''}</td>
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
-                {/* Mileage history modal (search, month grouping, full edit/delete) */}
-                {mileageModalOpen && (
-                  <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center">
-                    <div className="absolute inset-0 bg-black/50" onClick={() => setMileageModalOpen(false)} />
-                    <div className="relative w-full sm:max-w-4xl max-h-[85vh] bg-white dark:bg-slate-950 rounded-t-2xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
-                      <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-lg font-extrabold uppercase tracking-tight text-slate-900 dark:text-white">Mileage trips</div>
-                          <div className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                            Edit, search, and group trips without clogging the main screen.
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setMileageModalOpen(false)}
-                          className="p-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:bg-slate-200 dark:hover:bg-slate-800 active:scale-95 transition-all"
-                          aria-label="Close"
-                        >
-                          <X size={18} />
-                        </button>
-                      </div>
-
-                      <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40">
-                        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                          <div className="flex-1">
-                            <input
-                              value={mileageQuery}
-                              onChange={(e) => setMileageQuery(e.target.value)}
-                              placeholder="Search purpose, client, notes…"
-                              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-semibold"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <select
-                              value={mileageFilterMonth}
-                              onChange={(e) => setMileageFilterMonth(e.target.value)}
-                              className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-semibold"
-                            >
-                              {(() => {
-                                const months = Array.from(new Set(mileageForTaxYear.map(t => String(t.date || '').slice(0, 7)).filter(Boolean)))
-                                  .sort((a, b) => b.localeCompare(a));
-                                return ['all', ...months].map(m => (
-                                  <option key={m} value={m}>{m === 'all' ? 'All months' : m}</option>
-                                ));
-                              })()}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() => { setMileageFilterMonth('all'); setMileageQuery(''); }}
-                              className="px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-sm font-extrabold uppercase tracking-widest text-[11px] hover:bg-slate-100 dark:hover:bg-slate-900 active:scale-95 transition-all"
-                            >
-                              Reset
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="p-4 sm:p-5 overflow-y-auto max-h-[65vh]">
-                        {(() => {
-                          const q = mileageQuery.trim().toLowerCase();
-                          const filtered = mileageForTaxYear
-                            .slice()
-                            .sort((a, b) => b.date.localeCompare(a.date))
-                            .filter(t => {
-                              const month = String(t.date || '').slice(0, 7);
-                              if (mileageFilterMonth !== 'all' && month !== mileageFilterMonth) return false;
-                              if (!q) return true;
-                              const hay = `${t.purpose || ''} ${t.client || ''} ${(t.notes || '')}`.toLowerCase();
-                              return hay.includes(q);
-                            });
-
-                          if (filtered.length === 0) {
-                            return (
-                              <div className="p-6 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200">
-                                <div className="font-extrabold uppercase tracking-widest text-xs">No trips found</div>
-                                <div className="text-sm mt-2 text-slate-600 dark:text-slate-300">Try clearing filters or searching something else.</div>
-                              </div>
-                            );
-                          }
-
-                          const groups: Record<string, any[]> = {};
-                          filtered.forEach(t => {
-                            const m = String(t.date || '').slice(0, 7) || 'Unknown';
-                            if (!groups[m]) groups[m] = [];
-                            groups[m].push(t);
-                          });
-                          const monthKeys = Object.keys(groups).sort((a, b) => b.localeCompare(a));
-
-                          return (
-                            <div className="space-y-4">
-                              {monthKeys.map(month => (
-                                <div key={month} className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-                                  <div className="px-4 py-3 bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                                    <div className="font-extrabold uppercase tracking-widest text-xs text-slate-700 dark:text-slate-200">{month}</div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-400">{groups[month].length} trip{groups[month].length !== 1 ? 's' : ''}</div>
-                                  </div>
-
-                                  <div className="overflow-x-auto">
-                                    <table className="min-w-[900px] w-full text-sm">
-                                      <thead className="bg-white dark:bg-slate-950">
-                                        <tr className="text-left text-slate-700 dark:text-slate-200">
-                                          <th className="py-2 px-4 font-extrabold uppercase tracking-widest text-xs">Date</th>
-                                          <th className="py-2 px-4 font-extrabold uppercase tracking-widest text-xs">Miles</th>
-                                          <th className="py-2 px-4 font-extrabold uppercase tracking-widest text-xs">Purpose</th>
-                                          <th className="py-2 px-4 font-extrabold uppercase tracking-widest text-xs">Client</th>
-                                          <th className="py-2 px-4 font-extrabold uppercase tracking-widest text-xs">Notes</th>
-                                          <th className="py-2 px-4 font-extrabold uppercase tracking-widest text-xs text-right">Actions</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {groups[month].map(trip => (
-                                          <tr key={trip.id} className="border-t border-slate-200 dark:border-slate-800">
-                                            <td className="py-2 px-4">
-                                              <input type="date" value={trip.date} onChange={e => updateMileageTrip(trip.id, { date: e.target.value })} className="bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
-                                            </td>
-                                            <td className="py-2 px-4">
-                                              <input type="number" value={trip.miles} onChange={e => updateMileageTrip(trip.id, { miles: Number(e.target.value) })} className="w-24 bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
-                                            </td>
-                                            <td className="py-2 px-4">
-                                              <input type="text" value={trip.purpose} onChange={e => updateMileageTrip(trip.id, { purpose: e.target.value })} className="w-64 bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
-                                            </td>
-                                            <td className="py-2 px-4">
-                                              <input type="text" value={trip.client || ''} onChange={e => updateMileageTrip(trip.id, { client: e.target.value })} className="w-40 bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
-                                            </td>
-                                            <td className="py-2 px-4">
-                                              <input type="text" value={trip.notes || ''} onChange={e => updateMileageTrip(trip.id, { notes: e.target.value })} className="w-48 bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
-                                            </td>
-                                            <td className="py-2 px-4 text-right">
-                                              <button onClick={() => deleteMileageTrip(trip.id)} className="px-3 py-2 rounded-lg bg-red-600 text-white font-extrabold uppercase tracking-widest text-xs hover:bg-red-700 active:scale-95 transition-all">Delete</button>
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          );
-                        })()}
-                      </div>
-
-                      <div className="p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-950">
-                        <div className="text-xs text-slate-600 dark:text-slate-300">
-                          Rate: <span className="font-bold">{(mileageRateCents/100).toFixed(3)}</span> per mile • Export as CSV from the Tax Snapshot tools.
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setMileageModalOpen(false)}
-                          className="px-4 py-2 rounded-lg bg-blue-600 text-white font-extrabold uppercase tracking-widest text-xs hover:bg-blue-700 active:scale-95 transition-all"
-                        >
-                          Done
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                </div>
-
-<div className="bg-white dark:bg-slate-900/60 backdrop-blur-xl border border-slate-200/60 dark:border-slate-800 shadow-lg rounded-3xl p-6 relative overflow-hidden">
+<div id="report-planner" className="bg-white dark:bg-slate-900/60 backdrop-blur-xl border border-slate-200/60 dark:border-slate-800 shadow-lg rounded-3xl p-6 relative overflow-hidden">
                   <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-blue-500/10 dark:bg-blue-400/10 opacity-0 dark:opacity-100 blur-2xl pointer-events-none" />
                   <button
                     onClick={() => setIsPlannerOpen(!isPlannerOpen)}
@@ -7609,7 +7497,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                     {/* Modal Footer */}
                     <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-200">
                       <button
-                        onClick={() => setShowPLPreview(false)}
+                        onClick={closePLPreview}
                         className="px-6 py-3 border border-slate-300 dark:border-slate-700 rounded-lg font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                       >
                         Close
@@ -7695,7 +7583,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                               if (cloneWrapper && cloneWrapper.parentNode) cloneWrapper.parentNode.removeChild(cloneWrapper);
                             }
                             showToast('PDF exported successfully!', 'success');
-                            setTimeout(() => setShowPLPreview(false), 1000);
+                            setTimeout(() => closePLPreview(), 1000);
                           } catch (error) {
                             console.error('PDF generation error:', error);
                             showToast('Failed to generate PDF. Please try again.', 'error');
@@ -8311,14 +8199,6 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4 pb-24">
             {/* Settings Header */}
             <div className="flex items-center gap-2 sm:gap-3">
-              <button
-                type="button"
-                onClick={() => (window.history.length > 1 ? window.history.back() : setCurrentPage(Page.Dashboard, { replace: true }))}
-                className="p-2 sm:p-2.5 rounded-lg bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200 flex-shrink-0 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                aria-label="Back"
-              >
-                <ArrowLeft size={20} />
-              </button>
               <div className="p-2 sm:p-2.5 rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 flex-shrink-0">
                 <Settings size={20} className="sm:w-6 sm:h-6" strokeWidth={1.5} />
               </div>
@@ -8375,7 +8255,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                   <Trash2 size={18} />
                   <span className="text-[10px] md:text-sm mt-0.5 md:mt-0">Data</span>
                 </button>
-
+                {LICENSING_ENABLED && (
                 <button
                   onClick={() => setSettingsTab('license')}
                   className={`flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 px-3 md:px-4 py-3 rounded-lg font-bold text-xs md:text-sm uppercase tracking-wide transition-all ${
@@ -8387,6 +8267,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                   <Key size={18} />
                   <span className="text-[10px] md:text-sm mt-0.5 md:mt-0">License</span>
                 </button>
+                )}
               </div>
             </div>
 
@@ -8620,7 +8501,8 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
               )}
 
               {/* License Tab */}
-              {settingsTab === 'license' && (
+              {LICENSING_ENABLED && settingsTab === 'license' && (
+
                 <div className="bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg animate-in fade-in slide-in-from-bottom-4">
                   <div className="flex items-center gap-3 mb-6">
                     <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center">
@@ -8672,7 +8554,8 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                             <label className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Email</label>
                             <p className="text-sm text-emerald-900 dark:text-emerald-100 font-medium break-all">{licenseInfo.email}</p>
                           </div>
-                        )}
+                        
+              )}
                         {licenseInfo.purchaseDate && (
                           <div>
                             <label className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Purchased</label>
@@ -9137,7 +9020,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                                       <div className="text-sm font-extrabold text-slate-900 dark:text-white truncate">{r?.note || "Linked receipt"}</div>
                                       <div className="text-xs text-slate-600 dark:text-slate-300">{r?.date || ""}</div>
                                       <div className="mt-2 flex flex-wrap gap-2">
-                                        <button type="button" onClick={() => { const rr = receipts.find(x => x.id === (activeItem as any).receiptId); if (rr) setViewingReceipt(rr); }} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[11px] font-extrabold uppercase tracking-widest hover:bg-slate-800 active:scale-95 transition-all">View</button>
+                                        <button type="button" onClick={() => { const rr = receipts.find(x => x.id === (activeItem as any).receiptId); if (rr) openReceipt(rr); }} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-[11px] font-extrabold uppercase tracking-widest hover:bg-slate-800 active:scale-95 transition-all">View</button>
                                         <button type="button" onClick={() => handleDownloadReceipt((activeItem as any).receiptId)} className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px] font-extrabold uppercase tracking-widest hover:bg-slate-300 dark:hover:bg-slate-700 active:scale-95 transition-all">Download</button>
                                         <button type="button" onClick={() => setActiveItem(prev => ({ ...prev, receiptId: undefined }))} className="px-3 py-1.5 rounded-lg bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300 text-[11px] font-extrabold uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all">Unlink</button>
                                       </div>
