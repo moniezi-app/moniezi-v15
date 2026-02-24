@@ -1,7 +1,7 @@
 {
   "name": "moniezi-core",
   "private": true,
-  "version": "15.0.0-taxprep_backnav",
+  "version": "15.0.1-taxprep_backnav_expense",
   "type": "module",
   "scripts": {
     "dev": "vite",

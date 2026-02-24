@@ -5948,7 +5948,13 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                    </div>
                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Scan</span>
                 </button>
-                <button onClick={() => { setScanMode('expenseWithReceipt'); scanInputRef.current?.click(); }} className="flex-shrink-0 w-24 h-24 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl flex flex-col items-center justify-center gap-2 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 transition-colors border border-emerald-200 dark:border-emerald-700/40 active:scale-95 snap-start">
+                {/*
+                  EXPENSE shortcut:
+                  Previously this launched the camera/receipt scan flow ("expenseWithReceipt").
+                  Per UX request, tapping Expense should open the Add Expense form first,
+                  where the user can optionally link/scan a receipt from within the form.
+                */}
+                <button onClick={() => { handleOpenFAB('expense'); }} className="flex-shrink-0 w-24 h-24 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl flex flex-col items-center justify-center gap-2 hover:bg-emerald-100 dark:hover:bg-emerald-500/15 transition-colors border border-emerald-200 dark:border-emerald-700/40 active:scale-95 snap-start">
                    <div className="bg-white dark:bg-slate-900 p-2.5 rounded-full shadow-sm text-emerald-700 dark:text-emerald-300">
                      <PlusCircle size={20} />
                    </div>
