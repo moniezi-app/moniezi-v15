@@ -49,6 +49,7 @@ import {
   UserCheck, 
   Hammer, 
   Truck, 
+  Car,
   CreditCard, 
   Code, 
   PenTool, 
@@ -693,6 +694,7 @@ function normalizePage(p: any): Page {
     all_transactions: Page.AllTransactions,
     reports: Page.Reports,
     clients: Page.Clients,
+    mileage: Page.Mileage,
     settings: Page.Settings,
     expenses: Page.Expenses,
     income: Page.Income,
@@ -739,8 +741,8 @@ function pageToHashPath(page: Page): string {
   switch (page) {
     case Page.Dashboard: return 'home';
     case Page.Invoices: return 'invoices';
-    case Page.Estimates: return 'estimates';
     case Page.Ledger: return 'ledger';
+    case Page.Mileage: return 'mileage';
     case Page.Clients: return 'clients';
     case Page.Reports: return 'reports';
     case Page.Settings: return 'settings';
@@ -6432,6 +6434,106 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
           </div>
         )}
 
+        {currentPage === Page.Mileage && (
+          <div className="space-y-8 animate-in fade-in slide-in-from-right-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="p-2 sm:p-2.5 rounded-lg bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300 flex-shrink-0">
+                <Car size={20} className="sm:w-6 sm:h-6" strokeWidth={1.5} />
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-950 dark:text-white font-brand">Mileage</h2>
+            </div>
+
+            <p className="text-slate-600 dark:text-slate-300 font-semibold mb-3">
+              Log trips daily and export IRS-ready mileage for tax time.
+            </p>
+
+            {/* Mileage Tracker (promoted to its own bottom-tab page) */}
+            <div className="bg-white dark:bg-slate-950 p-5 sm:p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white">Mileage</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Track deductible trips and export a clean CSV for your accountant.</p>
+                </div>
+                <div className="flex gap-2">
+                  <select value={taxPrepYear} onChange={e => setTaxPrepYear(Number(e.target.value))} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold">
+                    {[2026, 2025, 2024, 2023].map(y => (<option key={y} value={y}>{y}</option>))}
+                  </select>
+                  <button onClick={handleExportMileageCSV} className="px-4 py-3 rounded-lg bg-slate-900 text-white font-extrabold uppercase tracking-widest text-xs hover:bg-slate-800 active:scale-95 transition-all">Export Mileage CSV</button>
+                </div>
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-8 gap-3 items-end">
+                <div className="md:col-span-2">
+                  <label className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2 block">Date</label>
+                  <input type="date" value={newTrip.date} onChange={e => setNewTrip((p: any) => ({ ...p, date: e.target.value }))} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-bold" />
+                </div>
+                <div className="md:col-span-1">
+                  <label className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2 block">Miles</label>
+                  <input type="number" value={newTrip.miles} onChange={e => setNewTrip((p: any) => ({ ...p, miles: Number(e.target.value) }))} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-bold" placeholder="0" />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2 block">Purpose</label>
+                  <input type="text" value={newTrip.purpose} onChange={e => setNewTrip((p: any) => ({ ...p, purpose: e.target.value }))} placeholder="Client meeting, supply run, airport, etc." className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-bold" />
+                </div>
+                <div className="md:col-span-5 flex items-center justify-between gap-3">
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2 block">Client (optional)</label>
+                      <input type="text" value={newTrip.client} onChange={e => setNewTrip((p: any) => ({ ...p, client: e.target.value }))} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-bold" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2 block">Notes (optional)</label>
+                      <input type="text" value={newTrip.notes} onChange={e => setNewTrip((p: any) => ({ ...p, notes: e.target.value }))} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-bold" />
+                    </div>
+                  </div>
+                  <button onClick={() => addMileageTrip({ date: newTrip.date, miles: Number(newTrip.miles), purpose: newTrip.purpose, client: newTrip.client || undefined, notes: newTrip.notes || undefined })} className="px-5 py-3 rounded-lg bg-emerald-600 text-white font-extrabold uppercase tracking-widest text-xs hover:bg-emerald-700 active:scale-95 transition-all whitespace-nowrap">Add Trip</button>
+                </div>
+              </div>
+
+              <div className="mt-6 overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                      <th className="py-2 pr-4">Date</th>
+                      <th className="py-2 pr-4">Miles</th>
+                      <th className="py-2 pr-4">Purpose</th>
+                      <th className="py-2 pr-4">Client</th>
+                      <th className="py-2 pr-4">Notes</th>
+                      <th className="py-2 pr-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mileageForTaxYear.length === 0 ? (
+                      <tr><td colSpan={6} className="py-4 text-slate-500 dark:text-slate-400">No mileage trips for {taxPrepYear}.</td></tr>
+                    ) : mileageForTaxYear.slice().sort((a,b) => b.date.localeCompare(a.date)).map(trip => (
+                      <tr key={trip.id} className="border-b border-slate-200/60 dark:border-slate-800/60">
+                        <td className="py-2 pr-4">
+                          <input type="date" value={trip.date} onChange={e => updateMileageTrip(trip.id, { date: e.target.value })} className="bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
+                        </td>
+                        <td className="py-2 pr-4">
+                          <input type="number" value={trip.miles} onChange={e => updateMileageTrip(trip.id, { miles: Number(e.target.value) })} className="w-24 bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
+                        </td>
+                        <td className="py-2 pr-4">
+                          <input type="text" value={trip.purpose} onChange={e => updateMileageTrip(trip.id, { purpose: e.target.value })} className="w-64 bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
+                        </td>
+                        <td className="py-2 pr-4">
+                          <input type="text" value={trip.client || ''} onChange={e => updateMileageTrip(trip.id, { client: e.target.value })} className="w-40 bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
+                        </td>
+                        <td className="py-2 pr-4">
+                          <input type="text" value={trip.notes || ''} onChange={e => updateMileageTrip(trip.id, { notes: e.target.value })} className="w-48 bg-transparent border border-slate-200 dark:border-slate-800 rounded-md px-2 py-1 text-sm font-bold" />
+                        </td>
+                        <td className="py-2 pr-4 text-right">
+                          <button onClick={() => deleteMileageTrip(trip.id)} className="px-3 py-2 rounded-lg bg-red-600 text-white font-extrabold uppercase tracking-widest text-xs hover:bg-red-700 active:scale-95 transition-all">Delete</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
         {currentPage === Page.Reports && (
            <div className="space-y-8 animate-in fade-in slide-in-from-right-4">
               <div className="flex items-center gap-2 sm:gap-3">
@@ -8611,6 +8713,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
           Page.Income,
           Page.Expenses,
           Page.Clients,
+          Page.Mileage,
           Page.Reports,
           Page.Settings,
           Page.InvoiceDoc,
@@ -8645,6 +8748,12 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                   className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900"
                 >
                   Clients
+                </button>
+                <button
+                  onClick={() => setCurrentPage(Page.Mileage)}
+                  className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900"
+                >
+                  Mileage
                 </button>
                 <button
                   onClick={() => setCurrentPage(Page.Reports)}
@@ -8730,6 +8839,18 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
               </button>
               <span className={`text-[11px] mt-1 ${(currentPage === Page.AllTransactions || currentPage === Page.Ledger) ? 'font-bold text-blue-600 dark:text-blue-400' : 'font-semibold'}`} style={{ color: (currentPage === Page.AllTransactions || currentPage === Page.Ledger) ? undefined : 'var(--nav-inactive)' }}>Ledger</span>
             </div>
+
+            {/* Mileage */}
+            <button 
+              onClick={() => setCurrentPage(Page.Mileage)} 
+              className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 ${currentPage === Page.Mileage ? 'text-blue-600 dark:text-white' : ''}`}
+              style={{ color: currentPage === Page.Mileage ? undefined : 'var(--nav-inactive)' }}
+            >
+              <div className={`p-1.5 rounded-lg ${currentPage === Page.Mileage ? 'bg-blue-100 dark:bg-slate-800' : ''}`}>
+                <Car size={20} strokeWidth={currentPage === Page.Mileage ? 2 : 1.5} />
+              </div>
+              <span className={`text-[11px] mt-0.5 ${currentPage === Page.Mileage ? 'font-bold text-blue-600 dark:text-white' : 'font-semibold'}`} style={{ color: currentPage === Page.Mileage ? undefined : 'var(--nav-inactive)' }}>Mileage</span>
+            </button>
 
             {/* Clients */}
             <button 

@@ -4,7 +4,7 @@
 */
 
 // Bump this on every deploy
-const CACHE_VERSION = "moniezi-core-v0.1.0-2026-02-10";
+const CACHE_VERSION = "moniezi-core-v0.1.0-2026-02-26";
 const CACHE_NAME = `moniezi-cache-${CACHE_VERSION}`;
 
 // Resolve an asset relative to the service worker scope
@@ -70,23 +70,26 @@ self.addEventListener("fetch", (event) => {
   // Only handle same-origin requests
   if (url.origin !== self.location.origin) return;
 
-  // Navigation requests: network-first, fallback to cached index.html
+  // Navigation requests: CACHE-FIRST (offline-first)
+  // Why: iOS can show an intrusive "Turn Off Airplane Mode" prompt if we try network-first
+  // while the device is offline/airplane mode. MONIEZI should treat offline as normal.
   if (req.mode === "navigate") {
     event.respondWith(
       (async () => {
+        const cache = await caches.open(CACHE_NAME);
+
+        // Prefer cached app shell immediately.
+        const cachedIndex = await cache.match(toScopeUrl("./index.html"));
+        if (cachedIndex) return cachedIndex;
+
+        // Fallback: try network only if we don't have the shell cached yet.
         try {
           const fresh = await fetch(req);
-          const cache = await caches.open(CACHE_NAME);
-          cache.put(req, fresh.clone());
+          if (fresh && fresh.ok) {
+            cache.put(toScopeUrl("./index.html"), fresh.clone());
+          }
           return fresh;
         } catch (e) {
-          const cache = await caches.open(CACHE_NAME);
-          const cachedNav = await cache.match(req);
-          if (cachedNav) return cachedNav;
-          
-          const cachedIndex = await cache.match(toScopeUrl("./index.html"));
-          if (cachedIndex) return cachedIndex;
-          
           const cachedRoot = await cache.match(toScopeUrl("./"));
           return cachedRoot || Response.error();
         }

@@ -222,6 +222,7 @@ export enum Page {
   Invoice = 'invoice',
   Invoices = 'invoices',
   Clients = 'clients',
+  Mileage = 'mileage',
   Reports = 'reports',
   Settings = 'settings',
   InvoiceDoc = 'invoice_doc'
