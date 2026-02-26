@@ -122,6 +122,10 @@ const generateDocNumber = (prefix: 'INV' | 'EST', existingDocs: { number?: strin
 
 
 // --- Clients Helpers ---
+// Demo receipt lookup (used as a fallback if IndexedDB blobs are unavailable)
+const DEMO_ASSET_BY_ID = new Map(DEMO_RECEIPT_ASSETS.map(a => [a.id, a]));
+
+
 const normalize = (s: string) => (s || '').trim().toLowerCase();
 
 // --- Utility: Image Compressor ---
@@ -963,6 +967,12 @@ export default function App() {
         if (rec?.blob) {
           const url = URL.createObjectURL(rec.blob);
           updates[r.id] = url;
+        } else {
+          // Fallback for demo mode (or any case where the blob isn't in IndexedDB yet)
+          const demo = DEMO_ASSET_BY_ID.get(r.id);
+          if (demo?.dataUrl) {
+            updates[r.id] = demo.dataUrl;
+          }
         }
       }
       if (cancelled) {
@@ -986,6 +996,12 @@ export default function App() {
     try {
       const rec = await getReceiptBlob(receiptId);
       if (!rec) {
+        const demo = DEMO_ASSET_BY_ID.get(receiptId);
+        if (demo?.dataUrl) {
+          downloadReceiptToDevice(demo.dataUrl);
+          showToast("Downloaded to device", "success");
+          return;
+        }
         showToast("Receipt image is missing.", "error");
         return;
       }
@@ -5176,7 +5192,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                     </div>
                 </div>
                 <div className="flex-1 bg-black rounded-xl overflow-hidden relative border border-white/10 shadow-2xl mb-4 flex items-center justify-center">
-                    <img src={receiptPreviewUrls[viewingReceipt.id] || ''} alt="Receipt" className="max-w-full max-h-full object-contain" />
+                    <img src={receiptPreviewUrls[viewingReceipt.id] || DEMO_ASSET_BY_ID.get(viewingReceipt.id)?.dataUrl || ''} alt="Receipt" className="max-w-full max-h-full object-contain" />
                 </div>
                 <button onClick={() => deleteReceipt(viewingReceipt.id)} className="w-full py-4 bg-red-600/90 hover:bg-red-600 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95">
                     <Trash2 size={20} /> Delete Receipt
@@ -5968,7 +5984,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                       if (linkedTx) { handleEditItem(linkedTx); return; }
                       openReceipt(r);
                     }} className="flex-shrink-0 w-24 h-24 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden relative cursor-pointer shadow-sm group active:scale-95 transition-transform snap-start">
-                      <img src={receiptPreviewUrls[r.id] || ''} className="w-full h-full object-cover" />
+                      <img src={receiptPreviewUrls[r.id] || DEMO_ASSET_BY_ID.get(r.id)?.dataUrl || ''} className="w-full h-full object-cover" />
                       {r.note ? (
                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1">
                           <div className="text-[9px] font-extrabold uppercase tracking-widest text-white truncate">{r.note}</div>
@@ -9133,7 +9149,7 @@ html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-col
                                 title="Tap to view"
                               >
                                 {receiptPreviewUrls[(activeItem as any).receiptId] ? (
-                                  <img src={receiptPreviewUrls[(activeItem as any).receiptId]} alt="Receipt thumbnail" className="w-full h-full object-cover" />
+                                  <img src={receiptPreviewUrls[(activeItem as any).receiptId] || DEMO_ASSET_BY_ID.get((activeItem as any).receiptId)?.dataUrl || ''} alt="Receipt thumbnail" className="w-full h-full object-cover" />
                                 ) : (
                                   <div className="text-[10px] font-bold text-slate-500">No preview</div>
                                 )}
