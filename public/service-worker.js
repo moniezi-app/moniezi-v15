@@ -4,7 +4,10 @@
 */
 
 // Bump this on every deploy
-const CACHE_VERSION = "moniezi-core-v0.1.0-2026-02-26b";
+// v15.1.4: restore safe precache so iOS A2HS can launch offline on FIRST open.
+// The previous "no precache" change prevented the app shell from being available
+// when offline at cold start.
+const CACHE_VERSION = "moniezi-core-v0.1.0-2026-02-26c";
 const CACHE_NAME = `moniezi-cache-${CACHE_VERSION}`;
 
 // Resolve an asset relative to the service worker scope
@@ -27,9 +30,17 @@ const CORE_ASSETS = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
-      // iOS can show an intrusive "Turn Off Airplane Mode" prompt if the SW
-      // install tries to fetch/precache while offline. MONIEZI is offline-first,
-      // so we avoid any network work during install.
+      // Offline-first requires the app shell to be available from cache.
+      // We precache core assets, but we NEVER let a precache failure block install.
+      // (If the device is offline during install/update, caching will fail — but
+      // the SW should still install, and the app will work offline after the user
+      // opens it once while online.)
+      try {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.addAll(CORE_ASSETS);
+      } catch (e) {
+        // Swallow errors to avoid breaking install on flaky/offline networks.
+      }
       await self.skipWaiting();
     })()
   );

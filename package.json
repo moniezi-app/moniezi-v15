@@ -1,7 +1,7 @@
 {
   "name": "moniezi-core",
   "private": true,
-  "version": "15.1.3-taxprep_ios_offline_promptfix",
+  "version": "15.1.4-taxprep_ios_offline_launchfix",
   "type": "module",
   "scripts": {
     "dev": "vite",
