@@ -4,7 +4,7 @@
 */
 
 // Bump this on every deploy
-const CACHE_VERSION = "moniezi-core-v0.1.0-2026-02-26";
+const CACHE_VERSION = "moniezi-core-v0.1.0-2026-02-26b";
 const CACHE_NAME = `moniezi-cache-${CACHE_VERSION}`;
 
 // Resolve an asset relative to the service worker scope
@@ -27,13 +27,10 @@ const CORE_ASSETS = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
-      const cache = await caches.open(CACHE_NAME);
-      try {
-        await cache.addAll(CORE_ASSETS);
-      } catch (e) {
-        console.warn("[SW] Some core assets failed to cache:", e);
-      }
-      self.skipWaiting();
+      // iOS can show an intrusive "Turn Off Airplane Mode" prompt if the SW
+      // install tries to fetch/precache while offline. MONIEZI is offline-first,
+      // so we avoid any network work during install.
+      await self.skipWaiting();
     })()
   );
 });
@@ -84,7 +81,7 @@ self.addEventListener("fetch", (event) => {
 
         // Fallback: try network only if we don't have the shell cached yet.
         try {
-          const fresh = await fetch(req);
+          const fresh = await fetch(req, { cache: "force-cache" });
           if (fresh && fresh.ok) {
             cache.put(toScopeUrl("./index.html"), fresh.clone());
           }
@@ -106,7 +103,7 @@ self.addEventListener("fetch", (event) => {
       if (cached) return cached;
 
       try {
-        const res = await fetch(req);
+        const res = await fetch(req, { cache: "force-cache" });
         if (res && res.ok) {
           cache.put(req, res.clone());
         }
