@@ -89,6 +89,125 @@ import { getInsightCount } from './services/insightsEngine';
 import { putReceiptBlob, getReceiptBlob, deleteReceiptBlob, dataUrlToBlob, blobToDataUrl, clearAllReceipts } from './services/receiptStore';
 import { DEMO_RECEIPT_ASSETS } from './services/demoReceipts';
 import { loadAppState, saveAppState, clearAppState } from './services/appStore';
+
+// --- Offline setup UX (iOS PWA) ---
+const OFFLINE_SETUP_DONE_KEY = 'moniezi_offline_setup_done_v1';
+
+const isIOSDevice = () => {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /iPad|iPhone|iPod/i.test(ua);
+};
+
+const isStandalonePwa = () => {
+  // iOS (older): navigator.standalone
+  const nav: any = typeof navigator !== 'undefined' ? navigator : {};
+  if (nav && typeof nav.standalone === 'boolean') return nav.standalone;
+  // modern display-mode
+  if (typeof window !== 'undefined' && (window as any).matchMedia) {
+    try {
+      return window.matchMedia('(display-mode: standalone)').matches;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+};
+
+async function checkAppShellCached(): Promise<boolean> {
+  try {
+    if (typeof window === 'undefined' || !(window as any).caches) return false;
+    const keys = await caches.keys();
+    if (!keys || keys.length === 0) return false;
+
+    // Try common shell URLs (base + index.html). Any hit means we can cold-start offline.
+    const baseUrl = (import.meta as any).env?.BASE_URL || '/';
+    const candidates = [baseUrl, `${baseUrl}index.html`, './', './index.html'];
+    for (const key of keys) {
+      const cache = await caches.open(key);
+      for (const url of candidates) {
+        const res = await cache.match(url, { ignoreSearch: true });
+        if (res) return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function OfflineSetupBanner(props: {
+  isOnline: boolean;
+  standalone: boolean;
+  shellCached: boolean;
+  onDismiss: () => void;
+}) {
+  const { isOnline, standalone, shellCached, onDismiss } = props;
+
+  // Only show on iOS where the onboarding matters most.
+  if (!isIOSDevice()) return null;
+
+  const stepOnline = isOnline;
+  const stepA2HS = standalone;
+  const stepReady = shellCached;
+  const allDone = stepA2HS && stepReady;
+
+  return (
+    <div className="px-4 pt-4">
+      <div className="rounded-2xl border border-slate-200/20 bg-white/5 backdrop-blur-sm p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-sm font-extrabold tracking-wide text-white flex items-center gap-2">
+              <Shield size={16} /> Offline Setup (iPhone)
+            </div>
+            <div className="text-xs text-slate-300 mt-1">
+              iOS needs a one-time online setup so MONIEZI can launch reliably offline.
+            </div>
+          </div>
+          <button
+            onClick={onDismiss}
+            className="shrink-0 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-white transition-colors"
+            aria-label="Dismiss"
+          >
+            {allDone ? 'Done' : 'Hide'}
+          </button>
+        </div>
+
+        <div className="mt-3 grid grid-cols-1 gap-2">
+          <div className="flex items-center justify-between rounded-xl bg-black/20 border border-white/10 px-3 py-2">
+            <div className="text-xs text-slate-200">1) Open once while online</div>
+            <div className={"text-xs font-bold " + (stepOnline ? 'text-emerald-300' : 'text-amber-300')}>
+              {stepOnline ? 'OK' : 'Offline'}
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded-xl bg-black/20 border border-white/10 px-3 py-2">
+            <div className="text-xs text-slate-200">2) Add to Home Screen</div>
+            <div className={"text-xs font-bold " + (stepA2HS ? 'text-emerald-300' : 'text-amber-300')}>
+              {stepA2HS ? 'Installed' : 'Not yet'}
+            </div>
+          </div>
+          <div className="flex items-center justify-between rounded-xl bg-black/20 border border-white/10 px-3 py-2">
+            <div className="text-xs text-slate-200">3) Offline launch ready</div>
+            <div className={"text-xs font-bold " + (stepReady ? 'text-emerald-300' : 'text-amber-300')}>
+              {stepReady ? 'Ready' : 'Warming up'}
+            </div>
+          </div>
+        </div>
+
+        {!standalone && (
+          <div className="mt-3 text-xs text-slate-300">
+            Safari → Share → <span className="font-bold text-slate-100">Add to Home Screen</span>.
+          </div>
+        )}
+        {standalone && !shellCached && (
+          <div className="mt-3 text-xs text-slate-300">
+            Keep it open for a moment while online so iOS can cache the app shell.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 // --- Utility: UUID Generator ---
 const generateId = (prefix: string) => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -759,6 +878,58 @@ function pageToHashPath(page: Page): string {
 
 export default function App() {
   const [dataLoaded, setDataLoaded] = useState(false);
+
+  // --- iOS Offline Setup helper ---
+  const [offlineSetupDismissed, setOfflineSetupDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(OFFLINE_SETUP_DONE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    if (typeof navigator === 'undefined') return true;
+    return !!navigator.onLine;
+  });
+  const [standalone, setStandalone] = useState<boolean>(() => isStandalonePwa());
+  const [shellCached, setShellCached] = useState<boolean>(false);
+
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+
+    const t = setInterval(() => {
+      // iOS can change this when user adds to home screen.
+      setStandalone(isStandalonePwa());
+    }, 1500);
+
+    // Check cache readiness (best-effort)
+    checkAppShellCached().then(setShellCached);
+    const t2 = setTimeout(() => {
+      checkAppShellCached().then(setShellCached);
+    }, 2500);
+
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      clearInterval(t);
+      clearTimeout(t2);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Once installed + shell cached, mark setup as done.
+    if (standalone && shellCached) {
+      try {
+        localStorage.setItem(OFFLINE_SETUP_DONE_KEY, '1');
+      } catch {
+        // ignore
+      }
+      setOfflineSetupDismissed(true);
+    }
+  }, [standalone, shellCached]);
 
   // --- In-app navigation (cross-platform back button support) ---
   const [hashParams, setHashParams] = useState<{ receiptId?: string; modal?: string }>({});
@@ -5154,6 +5325,22 @@ html:not(.dark) .shadow { box-shadow: 0 1px 3px rgba(2, 6, 23, 0.14), 0 1px 2px 
 html:not(.dark) .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(203 213 225) !important; }
 `}</style>
       <div className="min-h-screen flex flex-col max-w-2xl mx-auto relative bg-slatebg dark:bg-slate-950 text-slate-900 dark:text-white overflow-hidden transition-colors duration-300">
+
+      {!offlineSetupDismissed && (
+        <OfflineSetupBanner
+          isOnline={isOnline}
+          standalone={standalone}
+          shellCached={shellCached}
+          onDismiss={() => {
+            try {
+              localStorage.setItem(OFFLINE_SETUP_DONE_KEY, '1');
+            } catch {
+              // ignore
+            }
+            setOfflineSetupDismissed(true);
+          }}
+        />
+      )}
       
       {/* Scan Receipt Confirm Modal */}
       {scanPreview && (
